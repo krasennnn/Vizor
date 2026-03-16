@@ -1,0 +1,17 @@
+spring:
+  jackson:
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false
+  jpa:
+    hibernate:
+      # Use create-drop for H2 (auto-generate schema from entities), none for Testcontainers (uses Flyway)
+      ddl-auto: ${TEST_DDL_AUTO:create-drop}
+  flyway:
+    # Disable Flyway for H2 (migrations are PostgreSQL-specific), enable for Testcontainers
+    enabled: ${TEST_FLYWAY_ENABLED:false}
+  datasource:
+    # Default to H2 for CI, will be overridden by Testcontainers if enabled
+    url: ${TEST_DATASOURCE_URL:jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    driver-class-name: ${TEST_DATASOURCE_DRIVER:org.h2.Driver}
+    username: test
+    password: test

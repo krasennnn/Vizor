@@ -1,0 +1,141 @@
+plugins {
+    id 'groovy'
+    id 'org.springframework.boot' version '3.5.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
+    id 'org.sonarqube' version '5.0.0.4638'
+}
+
+
+group = 'com.krasen'
+version = '0.0.1-SNAPSHOT'
+description = 'cca'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+    implementation 'org.apache.groovy:groovy'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.postgresql:postgresql:42.7.4'
+    implementation 'org.mapstruct:mapstruct:1.6.2'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.2'
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+    implementation 'org.flywaydb:flyway-core:11.14.1'
+    implementation "org.flywaydb:flyway-database-postgresql:11.4.1"
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'com.h2database:h2'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+bootJar {
+    archiveBaseName.set(rootProject.name)
+}
+
+jacoco {
+    toolVersion = "0.8.10"
+}
+
+tasks.jacocoTestReport {
+    dependsOn tasks.test
+
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// Task to generate a single report from all available Jacoco execution data files
+task jacocoMergedReport(type: JacocoReport) {
+    dependsOn compileJava, processResources
+
+    // Consume all .exec files directly (no separate merge task needed)
+    executionData fileTree(dir: "${buildDir}/jacoco", include: "**/*.exec")
+    sourceSets sourceSets.main
+    
+    // Only run if at least one execution data file exists
+    onlyIf {
+        def execFiles = fileTree(dir: "${buildDir}/jacoco", include: "**/*.exec").files
+        if (execFiles.isEmpty()) {
+            logger.warn("No Jacoco execution data files found for reporting")
+            return false
+        }
+        return true
+    }
+    
+    reports {
+        xml.required = true
+        xml.outputLocation = file("${buildDir}/reports/jacoco/merged/jacocoMergedReport.xml")
+        html.required = true
+        html.outputLocation = file("${buildDir}/reports/jacoco/merged/html")
+    }
+}
+
+sonarqube {
+    properties {
+        def organization = System.getenv("SONAR_ORGANIZATION") ?: ""
+        def projectKey = System.getenv("SONAR_PROJECT_KEY") ?: "vizor-backend"
+        def token = System.getenv("SONAR_TOKEN") ?: ""
+        def hostUrl = System.getenv("SONAR_HOST_URL") ?: "https://sonarcloud.io"
+        
+        property "sonar.projectKey", projectKey
+        property "sonar.projectName", "Vizor Backend"
+        property "sonar.host.url", hostUrl
+        property "sonar.sources", "src/main"
+        property "sonar.tests", "src/test"
+        property "sonar.java.source", "21"
+        property "sonar.java.target", "21"
+        property "sonar.sourceEncoding", "UTF-8"
+        // Use merged coverage report if it exists, otherwise fall back to regular report
+        def mergedReport = file("${buildDir}/reports/jacoco/merged/jacocoMergedReport.xml")
+        def regularReport = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+        def coverageReport = mergedReport.exists() ? mergedReport : regularReport
+        property "sonar.coverage.jacoco.xmlReportPaths", coverageReport.absolutePath
+        property "sonar.groovy.binaries", "${buildDir}/classes"
+        
+        // Exclusions
+        property "sonar.exclusions", [
+            "**/build/**",
+            "**/generated/**",
+            "**/*MapperImpl.java",
+            "**/config/**",
+            "**/dto/**"
+        ].join(",")
+        
+        if (token && hostUrl.contains("sonarcloud.io") && organization) {
+            property "sonar.organization", organization
+            property "sonar.token", token
+        } else if (token) {
+            property "sonar.token", token
+        }
+    }
+}
+
